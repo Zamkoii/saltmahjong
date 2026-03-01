@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salt Mahjong: Level Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+        }
+        .card {
+            aspect-ratio: 3/4;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 8px;
+            font-weight: 800;
+            border: 3px solid rgba(255,255,255,0.1);
+        }
+        .card.selected .card-inner {
+            border-color: white;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(255,255,255,0.5);
+        }
+        .card.wrong .card-inner {
+            border-color: #ef4444;
+            animation: shake 0.4s;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .cat-salt { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+        .cat-acid { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+        .cat-base { background: linear-gradient(135deg, #10b981, #047857); }
+        .cat-prop { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        
+        .fade-out { opacity: 0; pointer-events: none; transition: 0.5s; }
+    </style>
+</head>
+<body class="p-4 min-h-screen flex flex-col items-center">
+
+    <!-- Header -->
+    <div class="w-full max-w-xl flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-black text-blue-400">SALT MAHJONG</h1>
+            <div id="level-display" class="text-sm text-slate-400 font-bold uppercase tracking-widest">Babak 1</div>
+        </div>
+        <div class="bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 text-center">
+            <div class="text-[10px] text-slate-500 uppercase">Skor</div>
+            <div id="score" class="text-xl font-mono text-yellow-400">0</div>
+        </div>
+    </div>
+
+    <!-- Selection Helper -->
+    <div id="selection-bar" class="w-full max-w-xl flex gap-2 mb-8 h-12">
+        <div id="slot-salt" class="flex-1 rounded-lg border-2 border-dashed border-blue-500/30 flex items-center justify-center text-[10px] text-blue-500">GARAM</div>
+        <div id="slot-acid" class="flex-1 rounded-lg border-2 border-dashed border-red-500/30 flex items-center justify-center text-[10px] text-red-500">ASAM</div>
+        <div id="slot-base" class="flex-1 rounded-lg border-2 border-dashed border-emerald-500/30 flex items-center justify-center text-[10px] text-emerald-500">BASA</div>
+        <div id="slot-prop" class="flex-1 rounded-lg border-2 border-dashed border-amber-500/30 flex items-center justify-center text-[10px] text-amber-500">SIFAT</div>
+    </div>
+
+    <!-- Board -->
+    <div id="board" class="grid grid-cols-4 gap-3 w-full max-w-xl"></div>
+
+    <!-- Feedback Popup -->
+    <div id="popup" class="fixed inset-0 bg-slate-900/90 hidden flex items-center justify-center p-6 z-50">
+        <div class="bg-slate-800 p-8 rounded-3xl border-2 border-emerald-500 max-w-xs w-full text-center">
+            <div class="text-4xl mb-2">✅</div>
+            <h2 class="text-xl font-bold text-emerald-400 mb-2">Benar!</h2>
+            <p id="popup-text" class="text-sm text-slate-300 mb-6"></p>
+            <button id="next-btn" class="w-full bg-emerald-600 py-3 rounded-xl font-bold">LANJUT</button>
+        </div>
+    </div>
+
+    <!-- Level Complete Popup -->
+    <div id="level-popup" class="fixed inset-0 bg-blue-900/90 hidden flex items-center justify-center p-6 z-50">
+        <div class="text-center">
+            <h2 class="text-4xl font-black mb-4">BABAK SELESAI!</h2>
+            <button id="next-level-btn" class="bg-white text-blue-900 px-8 py-3 rounded-full font-black text-lg">LANJUT KE BABAK BERIKUTNYA</button>
+        </div>
+    </div>
+
+    <script>
+        const allSets = [
+            // Level 1: Garam Netral (Gampang)
+            { level: 1, g: "NaCl", a: "HCl", b: "NaOH", s: "Netral", expl: "Sama-sama kuat, tidak ada yang menang, jadi Netral!" },
+            { level: 1, g: "K2SO4", a: "H2SO4", b: "KOH", s: "Netral", expl: "Berasal dari asam kuat & basa kuat. pH tetap 7." },
+            
+            // Level 2: Garam Asam & Basa Terkenal
+            { level: 2, g: "CH3COONa", a: "CH3COOH", b: "NaOH", s: "Basa", expl: "Basa (NaOH) lebih kuat dari asam, jadi sifatnya Basa." },
+            { level: 2, g: "NH4Cl", a: "HCl", b: "NH3", s: "Asam", expl: "Asam (HCl) lebih kuat dari basa, jadi sifatnya Asam." },
+            { level: 2, g: "NaCN", a: "HCN", b: "NaOH", s: "Basa", expl: "HCN itu asam lemah, NaOH basa kuat. Menang Basa!" },
+
+            // Level 3: Garam Lainnya
+            { level: 3, g: "NaF", a: "HF", b: "NaOH", s: "Basa", expl: "HF asam lemah, NaOH basa kuat. Larutan jadi Basa." },
+            { level: 3, g: "NH4NO3", a: "HNO3", b: "NH3", s: "Asam", expl: "HNO3 asam kuat, NH3 basa lemah. Larutan jadi Asam." },
+            { level: 3, g: "KNO2", a: "HNO2", b: "KOH", s: "Basa", expl: "Asam nitrit lemah, kalium hidroksida kuat. Sifatnya Basa." },
+            { level: 3, g: "AlCl3", a: "HCl", b: "Al(OH)3", s: "Asam", expl: "Asam klorida kuat, aluminium hidroksida lemah. Sifatnya Asam." }
+        ];
+
+        let currentLevel = 1;
+        let score = 0;
+        let selectedIndices = [];
+        let levelCards = [];
+
+        function startLevel(lvl) {
+            currentLevel = lvl;
+            document.getElementById('level-display').innerText = `Babak ${lvl}`;
+            document.getElementById('level-popup').classList.add('hidden');
+            
+            const setsForLevel = allSets.filter(s => s.level === lvl);
+            levelCards = [];
+            
+            setsForLevel.forEach((set, idx) => {
+                levelCards.push({ id: idx, type: 'salt', val: set.g, original: set });
+                levelCards.push({ id: idx, type: 'acid', val: set.a });
+                levelCards.push({ id: idx, type: 'base', val: set.b });
+                levelCards.push({ id: idx, type: 'prop', val: set.s });
+            });
+
+            levelCards.sort(() => Math.random() - 0.5);
+            renderBoard();
+        }
+
+        function renderBoard() {
+            const board = document.getElementById('board');
+            board.innerHTML = '';
+            levelCards.forEach((card, index) => {
+                const el = document.createElement('div');
+                el.className = `card ${card.matched ? 'fade-out' : ''} ${selectedIndices.includes(index) ? 'selected' : ''} ${card.wrong ? 'wrong' : ''}`;
+                el.innerHTML = `<div class="card-inner cat-${card.type}"><div class="text-[8px] opacity-50 uppercase">${card.type}</div>${card.val}</div>`;
+                el.onclick = () => selectCard(index);
+                board.appendChild(el);
+            });
+            updateSlots();
+        }
+
+        function updateSlots() {
+            ['salt', 'acid', 'base', 'prop'].forEach(t => {
+                const slot = document.getElementById(`slot-${t}`);
+                const sel = selectedIndices.find(i => levelCards[i].type === t);
+                if(sel !== undefined) {
+                    slot.innerText = levelCards[sel].val;
+                    slot.classList.add('bg-slate-700', 'text-white');
+                } else {
+                    slot.innerText = t.toUpperCase().replace('PROP', 'SIFAT');
+                    slot.classList.remove('bg-slate-700', 'text-white');
+                }
+            });
+        }
+
+        function selectCard(idx) {
+            if (levelCards[idx].matched) return;
+            
+            const type = levelCards[idx].type;
+            const sameType = selectedIndices.find(i => levelCards[i].type === type);
+            
+            if (selectedIndices.includes(idx)) {
+                selectedIndices = selectedIndices.filter(i => i !== idx);
+            } else {
+                if (sameType !== undefined) selectedIndices = selectedIndices.filter(i => i !== sameType);
+                selectedIndices.push(idx);
+            }
+            renderBoard();
+
+            if (selectedIndices.length === 4) checkMatch();
+        }
+
+        function checkMatch() {
+            const id = levelCards[selectedIndices[0]].id;
+            const isMatch = selectedIndices.every(i => levelCards[i].id === id);
+
+            if (isMatch) {
+                const data = levelCards.find(c => c.id === id && c.type === 'salt').original;
+                score += 100;
+                document.getElementById('score').innerText = score;
+                
+                document.getElementById('popup-text').innerText = data.expl;
+                document.getElementById('popup').classList.remove('hidden');
+                
+                selectedIndices.forEach(i => levelCards[i].matched = true);
+                selectedIndices = [];
+            } else {
+                selectedIndices.forEach(i => levelCards[i].wrong = true);
+                renderBoard();
+                setTimeout(() => {
+                    levelCards.forEach(c => c.wrong = false);
+                    selectedIndices = [];
+                    renderBoard();
+                }, 500);
+            }
+        }
+
+        document.getElementById('next-btn').onclick = () => {
+            document.getElementById('popup').classList.add('hidden');
+            renderBoard();
+            if (levelCards.every(c => c.matched)) {
+                if (currentLevel < 3) {
+                    document.getElementById('level-popup').classList.remove('hidden');
+                } else {
+                    alert("Hebat! Kamu sudah menyelesaikan semua babak!");
+                }
+            }
+        };
+
+        document.getElementById('next-level-btn').onclick = () => {
+            startLevel(currentLevel + 1);
+        };
+
+        window.onload = () => startLevel(1);
+    </script>
+</body>
+</html>
